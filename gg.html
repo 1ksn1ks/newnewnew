@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Add a Pattern to a Polygon</title>
+    <script
+      data-hcs-config
+      data-hcs-cdn-url="https://kiloscribe.com/api/inscription-cdn/"
+      data-hcs-network="mainnet"
+      data-hcs-debug="true"
+      data-hcs-retry-attempts="5"
+      data-hcs-retry-backoff="500"
+      data-hcs-show-loading-indicator="true"
+      data-hcs-loading-callback-name="setLoadingIndicator"
+    ></script>
+    <link
+      data-src="hcs://1/0.0.6762200"
+      data-load-order="1"
+      data-required="true"
+      data-script-id="nes-css"
+      type="css"
+    />
+    <script
+      data-src="hcs://1/0.0.7473819"
+      data-script-id="wallet-connect"
+    ></script>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <link
+      href="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.css"
+      rel="stylesheet"
+    />
+    <script src="https://api.mapbox.com/mapbox-gl-js/v3.7.0/mapbox-gl.js"></script>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+
+      /* Style for buttons to fit text */
+      .nes-btn {
+        width: auto; /* Fit to text */
+      }
+
+      #options-container {
+        display: none; /* Initially hidden */
+        margin-top: 10px; /* Space above options */
+      }
+
+      /* Keep buttons in the same row */
+      #options-container button {
+        display: inline-block; /* Keep buttons on the same row */
+        margin-right: 5px; /* Space between buttons */
+      }
+
+      /* Container for the form */
+      .container {
+        display: none; /* Initially hidden */
+        width: 90%; /* Responsive width */
+        max-width: 320px; /* Set a max width for larger screens */
+        margin: 10px auto; /* Center the form container */
+        padding: 10px; /* Reduced padding */
+        background-color: #212529; /* Dark background */
+        border-radius: 8px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      #geojson-form label {
+        font-size: 14px; /* Smaller font size */
+        display: block;
+        margin: 5px 0 3px;
+      }
+
+      #geojson-form input,
+      #geojson-form textarea {
+        width: 100%;
+        font-size: 14px;
+        margin-bottom: 8px; /* Reduced margin for compact spacing */
+        padding: 6px; /* Smaller padding */
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+
+      /* Align longitude and latitude fields in the same row */
+      .coordinate-inputs {
+        display: flex;
+        justify-content: space-between; /* Distributes space between items */
+        margin-bottom: 8px;
+      }
+
+      /* Style for longitude and latitude input boxes */
+      .coordinate-inputs input {
+        flex: 1; /* Share the available space */
+        margin-right: 5px; /* Space between inputs */
+      }
+
+      .coordinate-inputs input:last-child {
+        margin-right: 0; /* No margin for the last input */
+      }
+
+      #geojson-form button {
+        font-size: 14px;
+        padding: 6px 8px; /* Smaller padding */
+        margin: 5px 2px; /* Spacing between buttons */
+      }
+
+      #newid {
+        width: calc(100% - 8px); /* Full width for the created topic ID field */
+      }
+
+      /* Style for the input next to TOOL era */
+      #tool-era-input {
+        width: auto; /* Fit to text */
+        margin-left: 10px; /* Space between button and input */
+      }
+      /* Style the popup container */
+      .mapboxgl-popup-content {
+        background-color: #f9f9f9; /* Background color */
+        color: #333; /* Text color */
+        padding: 15px; /* Padding inside the popup */
+        border-radius: 25px; /* Rounded corners */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); /* Optional box shadow */
+        font-family: Arial, sans-serif; /* Font family */
+      }
+
+      /* Style the popup tip (arrow) */
+      .mapboxgl-popup-tip {
+        display: none; /* Optionally hide the tip for a cleaner look, or keep it if needed */
+      }
+
+      /* Style the popup close button */
+      .mapboxgl-popup-close-button {
+        color: #000000; /* Change color of the close button */
+        top: 3px;
+        right: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <!-- Container for TOOL era button and wallet section -->
+    <div style="display: flex; align-items: center; margin-bottom: 10px">
+      <div
+        id="wallet-section"
+        class="nes-container is-rounded is-dark"
+        style="display: flex; align-items: center; margin-right: 10px"
+      >
+        <button
+          id="connect-wallet-btn"
+          class="nes-btn is-primary connect-wallet-btn"
+        >
+          Connect Wallet
+        </button>
+        <button
+          id="disconnect-wallet-btn"
+          style="display: none"
+          class="nes-btn is-warning disconnect-wallet-btn"
+        >
+          Disconnect
+        </button>
+        <div id="account-id" style="margin-left: 5px"></div>
+        <div id="account-balance" style="margin-left: 5px"></div>
+      </div>
+
+      <button id="tool-era-btn" class="nes-btn is-primary">TOOL era</button>
+    </div>
+
+    <!-- Options container with "Write", "Read", and "Create" buttons -->
+    <div id="options-container" style="display: flex; margin-bottom: 10px">
+      <button id="write-btn" class="nes-btn is-success">Write</button>
+      <button id="read-btn" class="nes-btn is-info">Read</button>
+      <button id="create-btn" class="nes-btn is-warning">Create</button>
+    </div>
+
+    <!-- Form container for "Write" option -->
+    <div
+      id="write-container"
+      class="container nes-container is-rounded is-dark"
+      style="display: none"
+    >
+      <form id="geojson-form">
+        <label for="topic">Topic ID (0.0.7390282 currently reading):</label
+        ><br />
+        <input
+          type="text"
+          id="topic"
+          placeholder="Enter topic ID"
+        /><br /><br />
+
+        <label for="title">Header letters (bold):</label>
+        <input type="text" id="title" />
+
+        <label for="url">Post your KILOSCRIBE.COM link page:</label>
+        <input type="url" id="url" />
+
+        <label for="url">Your NFT url:</label>
+        <input type="url" id="img_url" />
+
+        <label for="text">What is on your mind?:</label>
+        <textarea id="text" required=""></textarea>
+
+        <div class="coordinate-inputs">
+          <label for="longitude">Longitude:</label>
+          <label for="latitude">Latitude:</label>
+        </div>
+        <div class="coordinate-inputs">
+          <input type="number" step="any" id="longitude" required="" />
+          <input type="number" step="any" id="latitude" required="" />
+        </div>
+
+        <button id="submit-msg" type="submit" class="nes-btn is-success">
+          Inscribe Msg to Hedera
+        </button>
+      </form>
+    </div>
+    <!-- Read container for fetching messages -->
+    <div
+      class="container nes-container is-rounded is-dark"
+      id="read-container"
+      style="display: none"
+    >
+      <label for="read-topic-id">Enter Topic ID:</label>
+      <input
+        type="text"
+        id="read-topic-id"
+        placeholder="0.0.7390282"
+        value="0.0.7390282"
+      />
+      <button id="fetch-messages" type="button" class="nes-btn is-info">
+        Fetch Messages
+      </button>
+      <div id="messages-output" style="margin-top: 10px"></div>
+      <!-- Output area for messages -->
+    </div>
+    <!-- Form container for "Create" option -->
+    <div
+      class="container nes-container is-rounded is-dark"
+      id="create-container"
+      style="display: none"
+    >
+      <label for="newid">CREATED TOPICID:</label>
+      <input type="text" id="newid" placeholder="New Topic ID" />
+      <button id="new-topic" type="button" class="nes-btn is-warning">
+        Create Topic
+      </button>
+    </div>
+
+    <script>
+      const APP_METADATA = {
+        name: "My PlanNet",
+        description: "A Hashinals application using WalletConnect",
+        url: "https://myptest.kiloscribe.com/",
+        icons: ["https://tier.bot/api/inscription-cdn/0.0.4840719"],
+      };
+
+      const PROJECT_ID = "fdd65bec25e85908fecf7561fe42b41f";
+
+      function toggleContainer(containerId) {
+        const containers = [
+          "options-container",
+          "write-container",
+          "read-container",
+          "create-container",
+        ];
+
+        containers.forEach((id) => {
+          const element = document.getElementById(id);
+          if (element) {
+            element.style.display =
+              id === containerId
+                ? element.style.display === "none"
+                  ? "block"
+                  : "none"
+                : "none";
+          }
+        });
+      }
+
+      document
+        .getElementById("tool-era-btn")
+        .addEventListener("click", function () {
+          toggleContainer("options-container");
+        });
+
+      document
+        .getElementById("write-btn")
+        .addEventListener("click", function () {
+          toggleContainer("write-container");
+        });
+
+      document
+        .getElementById("read-btn")
+        .addEventListener("click", function () {
+          toggleContainer("read-container");
+        });
+
+      document
+        .getElementById("create-btn")
+        .addEventListener("click", function () {
+          toggleContainer("create-container");
+        });
+
+      // Set Mapbox access token
+      mapboxgl.accessToken =
+        "pk.eyJ1IjoiMWtzbjFrcyIsImEiOiJjbTF3MDNmOHowaWU2MmpzN21mbnh0ZDk5In0.UIvnkHf4WouanqXhm5e8cQ";
+
+      // Polygon data
+      const polygons = [
+        {
+          id: "polygon-1",
+          coordinates: [
+            [
+              [-133, 57],
+              [-80, 57],
+              [-80, 17],
+              [-133, 17],
+              [-133, 57],
+            ],
+          ],
+          imageOverlayCoordinates: [
+            [-133, 57],
+            [-80, 57],
+            [-80, 37],
+            [-133, 37],
+          ],
+          imageUrl: "https://tier.bot/api/inscription-cdn/0.0.4819897",
+          clickUrl: "https://kiloscribe.com/",
+        },
+      ];
+
+      const addPolygonLayer = (mapRef) => {
+        // Function to simulate fetching polygon data
+        async function fetchPolygonData() {
+          return new Promise((resolve) => {
+            setTimeout(() => resolve(polygons), 100); // Simulates a delay of 100ms
+          });
+        }
+
+        // Add the polygon sources and layers once the map has loaded
+        mapRef.on("load", async () => {
+          const polygons = await fetchPolygonData();
+
+          polygons.forEach((polygon) => {
+            // Add the geojson source with polygon coordinates
+            mapRef.addSource(`${polygon.id}-source`, {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                properties: {
+                  link: polygon.clickUrl, // Link to open on click
+                },
+                geometry: {
+                  type: "Polygon",
+                  coordinates: polygon.coordinates,
+                },
+              },
+            });
+
+            // Load the image for the polygon overlay
+            mapRef.loadImage(polygon.imageUrl, (error, image) => {
+              if (error) throw error;
+
+              // Add the image to the map
+              mapRef.addImage(`${polygon.id}-pattern`, image);
+
+              // Create a new layer and style it using `fill-pattern`.
+              mapRef.addLayer({
+                id: `${polygon.id}-pattern-layer`,
+                type: "fill",
+                source: `${polygon.id}-source`,
+                paint: {
+                  "fill-color": "rgba(255, 255, 255, 0)", // Transparent fill
+                  "fill-opacity": 0, // Ensure the fill is transparent
+                },
+              });
+
+              // Add a layer to display the image overlay
+              mapRef.addLayer({
+                id: `${polygon.id}-image-layer`,
+                type: "raster", // Use raster type for image
+                source: {
+                  type: "image",
+                  url: polygon.imageUrl, // Image URL
+                  coordinates: polygon.imageOverlayCoordinates, // Coordinates to define where to place the image
+                },
+              });
+
+              // Add a click event listener for the polygon layer
+              mapRef.on("click", `${polygon.id}-pattern-layer`, (e) => {
+                const properties = e.features[0].properties;
+                if (properties.link) {
+                  window.open(properties.link, "_blank"); // Open the link in a new tab
+                }
+              });
+
+              // Change the cursor to a pointer when hovering over the polygon
+              mapRef.on("mouseenter", `${polygon.id}-pattern-layer`, () => {
+                mapRef.getCanvas().style.cursor = "pointer";
+              });
+
+              // Change the cursor back to default when not hovering over the polygon
+              mapRef.on("mouseleave", `${polygon.id}-pattern-layer`, () => {
+                mapRef.getCanvas().style.cursor = "";
+              });
+            });
+          });
+        });
+      };
+
+      window.HCSReady = async function () {
+        console.log("All resources loaded, initializing game");
+
+        const sdk = window?.HashinalsWalletConnectSDK;
+
+        async function updateAccountInfo(accountId, balance) {
+          if (!accountId) {
+            isLoggedIn = false;
+            document.getElementById("connect-wallet-btn").style.display =
+              "block";
+            document.getElementById("disconnect-wallet-btn").style.display =
+              "none";
+            document.getElementById("account-id").textContent = ``;
+            document.getElementById("account-balance").textContent = ``;
+            return;
+          }
+          // example of getting user tokens, uncomment to try it out.
+          // const tokens = await sdk.getAccountTokens(accountId);
+          // console.log('tokens', tokens);
+
+          isLoggedIn = true;
+          document.getElementById(
+            "account-id"
+          ).textContent = `Connected: ${accountId}`;
+          document.getElementById(
+            "account-balance"
+          ).textContent = `Balance: ${balance}`;
+          document.getElementById("connect-wallet-btn").style.display = "none";
+          document.getElementById("disconnect-wallet-btn").style.display =
+            "block";
+        }
+
+        async function connectWallet() {
+          try {
+            const { balance, accountId } = await sdk.connectWallet(
+              PROJECT_ID,
+              APP_METADATA
+            );
+            console.log("account info is", accountId, balance);
+            updateAccountInfo(accountId, balance);
+          } catch (error) {
+            console.error("Failed to connect wallet:", error);
+          }
+        }
+
+        async function disconnectWallet() {
+          try {
+            await sdk.disconnectWallet(PROJECT_ID, APP_METADATA);
+            updateAccountInfo(undefined);
+          } catch (error) {
+            console.error("Failed to connect wallet:", error);
+          }
+        }
+
+        const initAccount = async () => {
+          const accountResponse = await sdk.initAccount(
+            PROJECT_ID,
+            APP_METADATA
+          );
+
+          if (accountResponse && accountResponse.accountId) {
+            updateAccountInfo(
+              accountResponse.accountId,
+              accountResponse.balance
+            );
+          }
+        };
+
+        initAccount();
+
+        document
+          .getElementById("connect-wallet-btn")
+          .addEventListener("click", connectWallet);
+        document
+          .getElementById("disconnect-wallet-btn")
+          .addEventListener("click", disconnectWallet);
+
+        document
+          .getElementById("submit-msg")
+          .addEventListener("click", async function (event) {
+            event.preventDefault(); // Prevent the default form submission behavior
+
+            // Your existing submitmsg function logic goes here
+            const topicID =
+              document.getElementById("topic").value || createdTopicId; // Use the input or createdTopicId
+            const title = document.getElementById("title").value;
+            const url = document.getElementById("url").value;
+            const img_url = document.getElementById("img_url").value;
+            const text = document.getElementById("text").value;
+            const longitude = parseFloat(
+              document.getElementById("longitude").value
+            );
+            const latitude = parseFloat(
+              document.getElementById("latitude").value
+            );
+
+            if (isNaN(longitude) || isNaN(latitude)) {
+              alert("Please enter valid coordinates.");
+              return;
+            }
+
+            // Ensure isLoggedIn is accessible
+            if (!isLoggedIn) {
+              alert(
+                "You need to connect your wallet in order to submit a message."
+              );
+              return;
+            }
+
+            const description = `
+<strong>${title}</strong>
+<p><a href="${url}" target="_blank">${url}</a></p>
+<p>${text}</p>`;
+
+            const newFeature = {
+              type: "Feature",
+              properties: {
+                description: description,
+                icon: "theatre",
+              },
+              geometry: {
+                type: "Point",
+                coordinates: [longitude, latitude],
+              },
+            };
+
+            const geojsonOutput = {
+              data: newFeature,
+              nft_img: img_url,
+            };
+
+            // Convert geojsonOutput to a JSON string before sending
+            const message = JSON.stringify(geojsonOutput);
+
+            try {
+              const receipt =
+                await window.HashinalsWalletConnectSDK.submitMessageToTopic(
+                  topicID,
+                  message
+                );
+              console.log("Message submitted successfully:", receipt);
+            } catch (error) {
+              console.error("Error submitting message:", error);
+              alert(
+                "There was an error submitting the message. Please check the console for details."
+              );
+            }
+          });
+
+        document
+          .getElementById("new-topic")
+          .addEventListener("click", createTopicID);
+
+        async function createTopicID() {
+          try {
+            const createdTopicId =
+              await window.HashinalsWalletConnectSDK.createTopic();
+            console.log("New topic created:", createdTopicId);
+            document.getElementById("newid").textContent = createdTopicId;
+          } catch (error) {
+            console.error("Error creating topic:", error);
+            alert(
+              "There was an error creating the topic. Please check the console for details."
+            );
+          }
+        }
+
+        // Function to fetch and parse messages
+        async function read() {
+          const topicId = "0.0.7390282";
+          const result = await window.HashinalsWalletConnectSDK.getMessages(
+            topicId
+          );
+
+          // Create an array to hold the extracted data from each message
+          const dataList = [];
+
+          // Loop through each message and extract the data
+          result.messages.forEach((message) => {
+            if (message.data) {
+              // Add the data object to the dataList array
+              dataList.push(message.data);
+            } else {
+              console.log("No data found in message");
+            }
+          });
+
+          // Log extracted data for debugging
+          console.log("Extracted Data:", dataList);
+
+          return dataList; // Return the dataList for use in the map
+        }
+
+        // Function to add popups and markers to the map
+        const addPopup = (mapRef, dataList) => {
+          mapRef.on("load", () => {
+            if (dataList && dataList.length > 0) {
+              mapRef.addSource("places", {
+                type: "geojson",
+                data: {
+                  type: "FeatureCollection",
+                  features: dataList, // Use dataList directly as features
+                },
+                cluster: true, // Enable clustering
+                clusterMaxZoom: 14, // Max zoom to cluster points on
+                clusterRadius: 50, // Radius of each cluster when clustering points
+              });
+
+              // Add a layer for the clusters
+              mapRef.addLayer({
+                id: "clusters",
+                type: "circle",
+                source: "places",
+                filter: ["has", "point_count"],
+                paint: {
+                  "circle-color": [
+                    "step",
+                    ["get", "point_count"],
+                    "#51bbd6", // Color for clusters with 1-9 points
+                    10,
+                    "#f1f075", // Color for clusters with 10-29 points
+                    30,
+                    "#f28cb1", // Color for clusters with 30+ points
+                  ],
+                  "circle-radius": [
+                    "step",
+                    ["get", "point_count"],
+                    15, // Radius for clusters with 1-9 points
+                    10,
+                    20, // Radius for clusters with 10-29 points
+                    30,
+                    25, // Radius for clusters with 30+ points
+                  ],
+                },
+              });
+
+              // Add a layer for the cluster count labels
+              mapRef.addLayer({
+                id: "cluster-count",
+                type: "symbol",
+                source: "places",
+                filter: ["has", "point_count"],
+                layout: {
+                  "text-field": "{point_count_abbreviated}",
+                  "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+                  "text-size": 12,
+                },
+              });
+
+              // Add a layer for the individual Popups (non-clustered points)
+              mapRef.addLayer({
+                id: "unclustered-point",
+                type: "symbol",
+                source: "places",
+                filter: ["!", ["has", "point_count"]],
+                layout: {
+                  "icon-image": ["get", "icon"],
+                  "icon-allow-overlap": true,
+                },
+              });
+
+              // When a cluster is clicked, zoom in
+              mapRef.on("click", "clusters", (e) => {
+                const features = mapRef.queryRenderedFeatures(e.point, {
+                  layers: ["clusters"],
+                });
+                const clusterId = features[0].properties.cluster_id;
+                mapRef
+                  .getSource("places")
+                  .getClusterExpansionZoom(clusterId, (err, zoom) => {
+                    if (err) return;
+
+                    mapRef.easeTo({
+                      center: features[0].geometry.coordinates,
+                      zoom: zoom,
+                    });
+                  });
+              });
+
+              // Show a popup when an unclustered point (individual marker) is clicked
+              mapRef.on("click", "unclustered-point", (e) => {
+                const coordinates = e.features[0].geometry.coordinates.slice();
+                const description = e.features[0].properties.description;
+
+                // Adjust coordinates for wrapping (longitude wrapping)
+                while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                  coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+                }
+
+                // Create and display the popup
+                new mapboxgl.Popup()
+                  .setLngLat(coordinates)
+                  .setHTML(`<div class="custom-popup">${description}</div>`) // Set the description inside the popup
+                  .addTo(mapRef);
+              });
+
+              // Change cursor style on hover over clusters and individual points
+              mapRef.on("mouseenter", "clusters", () => {
+                mapRef.getCanvas().style.cursor = "pointer";
+              });
+              mapRef.on("mouseleave", "clusters", () => {
+                mapRef.getCanvas().style.cursor = "";
+              });
+              mapRef.on("mouseenter", "unclustered-point", () => {
+                mapRef.getCanvas().style.cursor = "pointer";
+              });
+              mapRef.on("mouseleave", "unclustered-point", () => {
+                mapRef.getCanvas().style.cursor = "";
+              });
+            } else {
+              console.error("dataList is empty or undefined.");
+            }
+          });
+        };
+
+        // Initialize the map (replace with your actual map initialization code)
+        const mapRef = new mapboxgl.Map({
+          container: "map", // ID of the element to initialize the map
+          style: "mapbox://styles/mapbox/streets-v12", // Replace with your style URL
+          center: [0, 0], // Initial center [lng, lat]
+          zoom: 2, // Initial zoom level
+        });
+
+        // Fetch data and add Popups to the map
+        const dataList = await read(); // Wait for the read function to complete
+        addPopup(mapRef, dataList); // Call the addPopup function with dataList
+
+        addPolygonLayer(mapRef);
+      };
+    </script>
+
+    <script>
+      !(function (t, e) {
+        "object" == typeof exports && "undefined" != typeof module
+          ? e(exports)
+          : "function" == typeof define && define.amd
+          ? define(["exports"], e)
+          : e(
+              ((t =
+                "undefined" != typeof globalThis
+                  ? globalThis
+                  : t || self).HCSRecusionSDK = {})
+            );
+      })(this, function (t) {
+        "use strict";
+        class e {
+          constructor() {
+            (this.config = {
+              cdnUrl: "https://kiloscribe.com/api/inscription-cdn/",
+              network: "mainnet",
+              retryAttempts: 3,
+              retryBackoff: 300,
+              debug: !1,
+              showLoadingIndicator: !1,
+              loadingCallbackName: null,
+            }),
+              (this.configMapping = {
+                hcsCdnUrl: "cdnUrl",
+                hcsNetwork: "network",
+                hcsRetryAttempts: "retryAttempts",
+                hcsRetryBackoff: "retryBackoff",
+                hcsDebug: "debug",
+                hcsShowLoadingIndicator: "showLoadingIndicator",
+                hcsLoadingCallbackName: "loadingCallbackName",
+              }),
+              (this.LoadedScripts = {}),
+              (this.LoadedWasm = {}),
+              (this.LoadedImages = {}),
+              (this.LoadedVideos = {}),
+              (this.LoadedAudios = {}),
+              (this.LoadedAudioUrls = {}),
+              (this.LoadedGLBs = {}),
+              (this.scriptLoadedEvent = new Event("HCSScriptLoaded")),
+              (this.loadQueue = []),
+              (this.isProcessingQueue = !1);
+          }
+          log(...t) {
+            this.config.debug && console.log("[HCS SDK]", ...t);
+          }
+          error(...t) {
+            console.error("[HCS SDK]", ...t);
+          }
+          loadConfigFromHTML() {
+            const t = document.querySelector("script[data-hcs-config]");
+            t &&
+              Object.keys(this.configMapping).forEach((e) => {
+                if (t.dataset[e]) {
+                  const a = this.configMapping[e];
+                  let i = t.dataset[e];
+                  "true" === i && (i = !0),
+                    "false" === i && (i = !1),
+                    isNaN(Number(i)) || "" === i || (i = Number(i)),
+                    (this.config[a] = i);
+                }
+              }),
+              this.log("Loaded config:", this.config);
+          }
+          updateLoadingStatus(t, e) {
+            if (
+              "loaded" !== this.LoadedScripts[t] &&
+              (this.config.showLoadingIndicator &&
+                console.log("[HCS Loading] " + t + " : " + e),
+              (this.LoadedScripts[t] = e),
+              this.config.loadingCallbackName &&
+                "function" == typeof window[this.config.loadingCallbackName])
+            ) {
+              const a = window[this.config.loadingCallbackName];
+              "function" == typeof a && a(t, e);
+            }
+          }
+          async fetchWithRetry(
+            t,
+            e = this.config.retryAttempts,
+            a = this.config.retryBackoff
+          ) {
+            try {
+              const e = await fetch(t);
+              if (!e.ok) throw new Error("HTTP error! status: " + e.status);
+              return e;
+            } catch (i) {
+              if (e > 0)
+                return (
+                  this.log(
+                    "Retrying fetch for " + t + " Attempts left: " + (e - 1)
+                  ),
+                  await this.sleep(a),
+                  this.fetchWithRetry(t, e - 1, 2 * a)
+                );
+              throw i;
+            }
+          }
+          sleep(t) {
+            return new Promise((e) => setTimeout(e, t));
+          }
+          isDuplicate(t) {
+            return !!this.LoadedScripts[t];
+          }
+          async retrieveHCS1Data(
+            t,
+            e = this.config.cdnUrl,
+            a = this.config.network
+          ) {
+            const i = await this.fetchWithRetry(e + t + "?network=" + a);
+            return await i.blob();
+          }
+          async loadScript(t) {
+            const e = t.getAttribute("data-src"),
+              a = t.getAttribute("data-script-id"),
+              i = null == e ? void 0 : e.split("/").pop(),
+              o = t.getAttribute("type"),
+              s = t.hasAttribute("data-required"),
+              d = "module" === t.getAttribute("type");
+            if (!this.isDuplicate(i || "")) {
+              this.updateLoadingStatus(a, "loading");
+              try {
+                const e = t.getAttribute("data-cdn-url") || this.config.cdnUrl,
+                  r = t.getAttribute("data-network") || this.config.network,
+                  n = await this.retrieveHCS1Data(i, e, r);
+                if ("wasm" === o) {
+                  const e = await n.arrayBuffer(),
+                    i = await WebAssembly.compile(e);
+                  (this.LoadedWasm[a] = await WebAssembly.instantiate(i, {
+                    env: {},
+                    ...t.dataset,
+                  })),
+                    this.updateLoadingStatus(a, "loaded"),
+                    window.dispatchEvent(this.scriptLoadedEvent),
+                    this.log("Loaded wasm: " + a);
+                } else {
+                  const t = await n.text(),
+                    e = document.createElement("script");
+                  if (((e.textContent = t), d)) {
+                    e.type = "module";
+                    const a = new Blob([t], { type: "application/javascript" });
+                    e.src = URL.createObjectURL(a);
+                  }
+                  document.body.appendChild(e),
+                    this.updateLoadingStatus(a, "loaded"),
+                    window.dispatchEvent(this.scriptLoadedEvent),
+                    this.log("Loaded script: " + a),
+                    (e.onerror = (t) => {
+                      if (
+                        (this.error("Failed to load " + o + ": " + a, t),
+                        this.updateLoadingStatus(a, "failed"),
+                        s)
+                      )
+                        throw t;
+                    });
+                }
+              } catch (r) {
+                if (
+                  (this.error("Failed to load " + o + ": " + a, r),
+                  this.updateLoadingStatus(a, "failed"),
+                  s)
+                )
+                  throw r;
+              }
+            }
+          }
+          async loadStylesheet(t) {
+            const e = t.getAttribute("data-src"),
+              a = t.getAttribute("data-script-id"),
+              i = null == e ? void 0 : e.split("/").pop(),
+              o = t.hasAttribute("data-required");
+            if (!this.isDuplicate(i || "")) {
+              this.updateLoadingStatus(a, "loading");
+              try {
+                const e = t.getAttribute("data-cdn-url") || this.config.cdnUrl,
+                  o = t.getAttribute("data-network") || this.config.network,
+                  s = await this.retrieveHCS1Data(i, e, o),
+                  d = await s.text(),
+                  r = document.createElement("style");
+                (r.textContent = d),
+                  document.head.appendChild(r),
+                  this.updateLoadingStatus(a, "loaded"),
+                  window.dispatchEvent(this.scriptLoadedEvent),
+                  this.log("Loaded and inlined stylesheet: " + a);
+              } catch (s) {
+                if (
+                  (this.error("Failed to load stylesheet: " + a, s),
+                  this.updateLoadingStatus(a, "failed"),
+                  o)
+                )
+                  throw s;
+              }
+            }
+          }
+          async loadImage(t) {
+            const e = t.getAttribute("data-src"),
+              a = null == e ? void 0 : e.split("/").pop();
+            this.log("Loading image: " + a),
+              this.updateLoadingStatus("Image: " + a, "loaded");
+            try {
+              const e = t.getAttribute("data-cdn-url") || this.config.cdnUrl,
+                i = t.getAttribute("data-network") || this.config.network,
+                o = await this.retrieveHCS1Data(a, e, i),
+                s = URL.createObjectURL(o);
+              (t.src = s),
+                (this.LoadedImages[a] = s),
+                this.updateLoadingStatus("Image: " + a, "loaded"),
+                this.log("Loaded image: " + a);
+            } catch (i) {
+              this.error("Failed to load image: " + a, i),
+                this.updateLoadingStatus("Image: " + a, "failed");
+            }
+          }
+          async loadMedia(t, e) {
+            const a = t.getAttribute("data-src"),
+              i = null == a ? void 0 : a.split("/").pop();
+            this.log("Loading " + e + ": " + i),
+              this.updateLoadingStatus(e + ": " + i, "loading");
+            try {
+              const a = t.getAttribute("data-cdn-url") || this.config.cdnUrl,
+                o = t.getAttribute("data-network") || this.config.network,
+                s = await this.retrieveHCS1Data(i, a, o),
+                d = URL.createObjectURL(s);
+              (t.src = d),
+                "video" === e
+                  ? (this.LoadedVideos[i] = d)
+                  : (this.LoadedAudioUrls[i] = d),
+                this.updateLoadingStatus(e + ": " + i, "loaded"),
+                this.log("Loaded " + e + ": " + i);
+            } catch (o) {
+              this.error("Failed to load " + e + ": " + i, o),
+                this.updateLoadingStatus(e + ": " + i, "failed");
+            }
+          }
+          async loadGLB(t) {
+            const e = t.getAttribute("data-src"),
+              a = null == e ? void 0 : e.split("/").pop();
+            this.log("Loading GLB: " + a),
+              this.updateLoadingStatus("GLB: " + a, "loading");
+            try {
+              const e = t.getAttribute("data-cdn-url") || this.config.cdnUrl,
+                i = t.getAttribute("data-network") || this.config.network,
+                o = await this.retrieveHCS1Data(a, e, i),
+                s = URL.createObjectURL(o);
+              (t.src = s),
+                (this.LoadedGLBs[a] = s),
+                this.updateLoadingStatus("GLB: " + a, "loaded"),
+                this.log("Loaded GLB: " + a);
+            } catch (i) {
+              this.error("Failed to load GLB: " + a, i),
+                this.updateLoadingStatus("GLB: " + a, "failed");
+            }
+          }
+          async loadResource(t, e, a) {
+            return new Promise((i) => {
+              this.loadQueue.push({
+                element: t,
+                type: e,
+                order: a,
+                resolve: i,
+              }),
+                this.processQueue();
+            });
+          }
+          async processQueue() {
+            if (!this.isProcessingQueue) {
+              for (this.isProcessingQueue = !0; this.loadQueue.length > 0; ) {
+                const e = this.loadQueue.shift();
+                try {
+                  "script" === e.type
+                    ? await this.loadScript(e.element)
+                    : "image" === e.type
+                    ? await this.loadImage(e.element)
+                    : "video" === e.type || "audio" === e.type
+                    ? await this.loadMedia(e.element, e.type)
+                    : "glb" === e.type
+                    ? await this.loadGLB(e.element)
+                    : "css" === e.type &&
+                      (await this.loadStylesheet(e.element)),
+                    e.resolve();
+                } catch (t) {
+                  if (
+                    (this.error("Error processing queue item:", t),
+                    "script" === e.type &&
+                      e.element.hasAttribute("data-required"))
+                  )
+                    break;
+                }
+              }
+              this.isProcessingQueue = !1;
+            }
+          }
+          async init() {
+            return (
+              this.loadConfigFromHTML(),
+              new Promise((t) => {
+                const e = async () => {
+                  const e = document.querySelectorAll(
+                      'script[data-src^="hcs://"]'
+                    ),
+                    a = document.querySelectorAll('img[data-src^="hcs://"]'),
+                    i = document.querySelectorAll('video[data-src^="hcs://"]'),
+                    o = document.querySelectorAll('audio[data-src^="hcs://"]'),
+                    s = document.querySelectorAll(
+                      'model-viewer[data-src^="hcs://"]'
+                    ),
+                    d = document.querySelectorAll('link[data-src^="hcs://"]'),
+                    r = [];
+                  [
+                    { elements: e, type: "script" },
+                    { elements: a, type: "image" },
+                    { elements: i, type: "video" },
+                    { elements: o, type: "audio" },
+                    { elements: s, type: "glb" },
+                    { elements: d, type: "css" },
+                  ].forEach(({ elements: t, type: e }) => {
+                    t.forEach((t) => {
+                      const a =
+                        parseInt(t.getAttribute("data-load-order") || "") ||
+                        1 / 0;
+                      r.push(this.loadResource(t, e, a));
+                    });
+                  }),
+                    await Promise.all(r);
+                  const n = new MutationObserver((t) => {
+                    t.forEach((t) => {
+                      t.addedNodes.forEach((t) => {
+                        if (t.nodeType === Node.ELEMENT_NODE) {
+                          const e = t;
+                          e.matches('script[data-src^="hcs://"]')
+                            ? this.loadResource(e, "script", 1 / 0)
+                            : e.matches('img[data-src^="hcs://"]')
+                            ? this.loadResource(e, "image", 1 / 0)
+                            : e.matches('video[data-src^="hcs://"]')
+                            ? this.loadResource(e, "video", 1 / 0)
+                            : e.matches('audio[data-src^="hcs://"]')
+                            ? this.loadResource(e, "audio", 1 / 0)
+                            : e.matches('model-viewer[data-src^="hcs://"]')
+                            ? this.loadResource(e, "glb", 1 / 0)
+                            : e.matches('link[data-src^="hcs://"]') &&
+                              this.loadResource(e, "css", 1 / 0);
+                        }
+                      });
+                    });
+                  });
+                  document.body
+                    ? n.observe(document.body, { childList: !0, subtree: !0 })
+                    : document.addEventListener("DOMContentLoaded", () => {
+                        n.observe(document.body, {
+                          childList: !0,
+                          subtree: !0,
+                        });
+                      }),
+                    t();
+                };
+                "loading" === document.readyState
+                  ? document.addEventListener("DOMContentLoaded", e)
+                  : e();
+              })
+            );
+          }
+          async preloadImage(t) {
+            this.log("Loading image:" + t),
+              this.updateLoadingStatus("image: " + t, "loading");
+            const e = await this.retrieveHCS1Data(t),
+              a = URL.createObjectURL(e);
+            return (
+              (this.LoadedImages[t] = a),
+              this.updateLoadingStatus("image: " + t, "loaded"),
+              a
+            );
+          }
+          async preloadAudio(t) {
+            const e = document.createElement("audio");
+            e.setAttribute("data-topic-id", t),
+              e.setAttribute("data-src", "hcs://1/" + t),
+              document.body.appendChild(e),
+              await this.loadMedia(e, "audio");
+            const a = document.querySelector(
+              'audio[data-topic-id="' + t + '"]'
+            );
+            return (
+              a
+                ? (this.LoadedAudioUrls[t] = a.src)
+                : console.error("Failed to preload audio: " + t),
+              this.LoadedAudioUrls[t]
+            );
+          }
+          async playAudio(t, e = 1) {
+            const a = this.LoadedAudioUrls[t];
+            if (a) {
+              const i = new Audio(a);
+              (i.volume = e),
+                (this.LoadedAudios[t] = i),
+                i.play().catch((t) => {
+                  console.error("Failed to play audio:", t);
+                }),
+                i.addEventListener("ended", () => {
+                  i.remove(), delete this.LoadedAudios[t];
+                });
+            } else console.error("Audio not preloaded: " + t);
+          }
+          async pauseAudio(t) {
+            var e, a;
+            const i = document.querySelector(
+              'audio[data-topic-id="' + t + '"]'
+            );
+            i
+              ? (console.log("found element", i),
+                i.pause(),
+                null == (e = this.LoadedAudios[t]) || e.pause())
+              : null == (a = this.LoadedAudios[t]) || a.pause();
+          }
+          async loadAndPlayAudio(t, e = !1, a = 1) {
+            let i = document.querySelector('audio[data-topic-id="' + t + '"]');
+            if (i) (i.volume = a), await i.play();
+            else {
+              const o = document.createElement("audio");
+              (o.volume = a),
+                e && o.setAttribute("autoplay", "autoplay"),
+                o.setAttribute("data-topic-id", t),
+                o.setAttribute("data-src", "hcs://1/" + t),
+                document.body.appendChild(o),
+                await this.loadMedia(o, "audio"),
+                (i = document.querySelector(
+                  'audio[data-topic-id="' + t + '"]'
+                )),
+                e || (await i.play());
+            }
+          }
+        }
+        (window.HCS = new e()),
+          window.HCS.init().then(() => {
+            console.log("All HCS resources loaded"),
+              "function" == typeof window.HCSReady &&
+                (console.log("Running HCSReady..."), window.HCSReady());
+          });
+        const a = window.HCS;
+        (t.HCS = e),
+          (t.default = a),
+          (t.sleep = (t) => new Promise((e) => setTimeout(e, t))),
+          Object.defineProperties(t, {
+            __esModule: { value: !0 },
+            [Symbol.toStringTag]: { value: "Module" },
+          });
+      });
+    </script>
+  </body>
+</html>
