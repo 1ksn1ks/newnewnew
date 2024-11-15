@@ -168,11 +168,14 @@
         >
           Disconnect
         </button>
-        <div id="account-id" style="margin-left: 5px"></div>
-        <div id="account-balance" style="margin-left: 5px"></div>
+        <div style="display: flex; flex-direction: column">
+          <div id="account-id" style="margin-left: 5px"></div>
+          <div id="account-balance" style="margin-left: 5px"></div>
+        </div>
       </div>
-
-      <button id="tool-era-btn" class="nes-btn is-primary">TOOL era</button>
+      <div>
+        <button id="tool-era-btn" class="nes-btn is-primary">TOOL era</button>
+      </div>
     </div>
 
     <!-- Options container with "Write", "Read", and "Create" buttons -->
@@ -223,6 +226,7 @@
         </button>
       </form>
     </div>
+
     <!-- Read container for fetching messages -->
     <div
       class="container nes-container is-rounded is-dark"
@@ -239,9 +243,8 @@
       <button id="fetch-messages" type="button" class="nes-btn is-info">
         Fetch Messages
       </button>
-      <div id="messages-output" style="margin-top: 10px"></div>
-      <!-- Output area for messages -->
     </div>
+
     <!-- Form container for "Create" option -->
     <div
       class="container nes-container is-rounded is-dark"
@@ -249,7 +252,7 @@
       style="display: none"
     >
       <label for="newid">CREATED TOPICID:</label>
-      <input type="text" id="newid" placeholder="New Topic ID" />
+      <input type="text" id="newid" placeholder="New Topic ID" readonly />
       <button id="new-topic" type="button" class="nes-btn is-warning">
         Create Topic
       </button>
@@ -487,6 +490,12 @@
 
         initAccount();
 
+        // Add event listener to the button
+        document
+          .getElementById("fetch-messages")
+          .addEventListener("click", async function () {
+            await read(); // Call the read function when the button is clicked
+          });
         document
           .getElementById("connect-wallet-btn")
           .addEventListener("click", connectWallet);
@@ -575,7 +584,9 @@
             const createdTopicId =
               await window.HashinalsWalletConnectSDK.createTopic();
             console.log("New topic created:", createdTopicId);
-            document.getElementById("newid").textContent = createdTopicId;
+
+            // Set the value of the input field instead of textContent
+            document.getElementById("newid").value = createdTopicId;
           } catch (error) {
             console.error("Error creating topic:", error);
             alert(
@@ -586,7 +597,7 @@
 
         // Function to fetch and parse messages
         async function read() {
-          const topicId = "0.0.7390282";
+          const topicId = document.getElementById("read-topic-id").value; // Get user input
           const result = await window.HashinalsWalletConnectSDK.getMessages(
             topicId
           );
@@ -634,7 +645,8 @@
           console.log("Extracted Data:", imgDataList);
           console.log("Extracted Data:", cordDataList);
 
-          return dataList; // Return the dataList for use in the map
+          return { dataList, imgDataList, cordDataList };
+          // Return the dataList for use in the map
         }
 
         // Function to add popups and markers to the map
@@ -734,7 +746,7 @@
                 }
 
                 // Create and display the popup
-                new mapboxgl.Popup()
+                new mapboxgl.Popup({ offset: 25 })
                   .setLngLat(coordinates)
                   .setHTML(`<div class="custom-popup">${description}</div>`) // Set the description inside the popup
                   .addTo(mapRef);
@@ -759,28 +771,22 @@
           });
         };
 
-        // Create DOM element for the marker
-        const el = document.createElement("div");
-        el.id = "marker";
+        // Function to create markers from imgDataList and cordDataList
+        function createMarkers(mapRef, imgDataList, cordDataList) {
+          for (let i = 0; i < imgDataList.length; i++) {
+            const imageUrl = imgDataList[i];
+            const coordinates = cordDataList[i];
+            const el = document.createElement("div");
+            el.id = "marker";
+            el.style.backgroundImage = `url(${imageUrl})`;
+            el.style.backgroundSize = "cover";
+            el.style.width = "50px";
+            el.style.height = "50px";
+            el.style.borderRadius = "50%";
 
-        // Set the image for the marker (if available)
-        if (imgDataList[index]) {
-          el.style.backgroundImage = `url(${imgDataList[index]})`;
-        } else {
-          // If no image, set a default image or color
-          el.style.backgroundColor = "gray"; // Example fallback
+            new mapboxgl.Marker(el).setLngLat(coordinates).addTo(mapRef);
+          }
         }
-
-        // Set size of the marker
-        el.style.width = "500px";
-        el.style.height = "500px";
-        el.style.borderRadius = "50%";
-
-        // Create the marker and add to the map
-        new mapboxgl.Marker(el)
-          .setLngLat(coordinates)
-          .setPopup(popup)
-          .addTo(mapRef);
 
         // Initialize the map (replace with your actual map initialization code)
         const mapRef = new mapboxgl.Map({
@@ -791,9 +797,9 @@
         });
 
         // Fetch data and add Popups to the map
-        const dataList = await read(); // Wait for the read function to complete
+        const { dataList, imgDataList, cordDataList } = await read();
         addPopup(mapRef, dataList); // Call the addPopup function with dataList
-
+        createMarkers(mapRef, imgDataList, cordDataList);
         addPolygonLayer(mapRef);
       };
     </script>
